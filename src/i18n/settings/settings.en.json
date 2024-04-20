@@ -1,0 +1,15 @@
+{
+  "heading-settings": "Settings",
+  "tracking": {
+    "heading": "Tracking",
+    "description": "We don't place any cookies in your browser and don't collect any data on you. When we display videos using Instagram or YouTube though, it is very likely that these services will place cookies in your browser and / or track you.",
+    "youtube": {
+      "name": "YouTube",
+      "description": "Allow YouTube embeds to be shown"
+    },
+    "instagram": {
+      "name": "Instagram",
+      "description": "Allow Instagram embeds to be shown"
+    }
+  }
+}
