@@ -1,0 +1,51 @@
+{
+  "titleHeading": "Create a new trick",
+
+  "label": {
+    "technicalName": "Technical Name",
+    "alias": "Alias",
+    "positionStart": "Starting Position",
+    "positionEnd": "Ending Position",
+    "difficulty": "Difficulty",
+    "description": "Description",
+    "establishedBy": "Invented by",
+    "inTheYear": "in the year",
+    "tips": "Tips",
+    "variantOf": "Variant of",
+    "recommendedPrereq": "Prerequisites",
+    "videos": "Videos"
+  },
+
+  "question": {
+    "alias": "What do you actually call this?",
+    "difficulty": "1 to 10. Keep empty if unsure.",
+    "tips": "Put each tip on a separate line.",
+    "variantOf": "Is this a variant of another trick?",
+    "recommendedPrereq": "Tricks you would recommend to learn before trying this one?"
+  },
+
+  "placeholder": {
+    "technicalName": "180 Chestroll Crazyness",
+    "alias": "Chewbacca Roll",
+    "establishedBy": "Ian, probably",
+    "description": "A fitting description",
+    "tips": "This is my first tip.\nAnd this is my second tip.",
+    "difficulty": "I'm not sure"
+  },
+
+  "componentNotImplemented": "This component has yet to be implemented.",
+
+  "toast": {
+    "createdTrick": "Created trick {name}",
+    "goToTrick": "Go to Trick",
+    "addAnotherTrick": "Add another one"
+  },
+
+  "error": {
+    "title": "Uh oh…",
+    "message": "An error happened when trying to insert the new trick into the DB. Check the console (F12) for more info."
+  },
+
+  "buttonSubmit": "Create",
+  "buttonCancel": "Cancel"
+}
