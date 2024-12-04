@@ -2,6 +2,7 @@ import { DbObject } from './dbObject';
 import { DbTricksTableZod, DbMetadataZod } from '../schemas/CurrentVersionSchema';
 import { z } from 'zod';
 import { MainDatabase } from '../databaseInstance';
+import { primaryKeysMatch } from '@/lib/utils';
 
 /**
  * This is the "rich" object that should be used by the UI Layer.
@@ -393,21 +394,152 @@ export class Trick implements DbObject {
 
   /**
    * Will delete the tricks and the metadata assigned to it.
-   * @returns `true` on success, else an Error message
+   * @returns void on success else throws an Error message
    */
-  public async delete(): Promise<string | true> {
+  public async delete(): Promise<void> {
     if (this.#modified.deleted) {
-      return true;
+      return;
     }
-    try {
-      await Promise.all([
-        this.db.tricks.delete(this.primaryKey),
-        this.db.metadata.delete([...this.primaryKey, 'Tricks' as const]),
-      ]);
-      return true;
-    } catch (err) {
-      console.error(err);
-      return 'Something went wrong when trying to delete a Trick. See the console for more info.';
+    return this.db.transaction('rw', this.db.tricks, this.db.metadata, this.db.combos, async () => {
+      // Delete the trick itself
+      this.db.tricks.delete(this.primaryKey);
+
+      // Delete the tricks metadata
+      this.db.metadata.delete([...this.primaryKey, 'Trick' as const]);
+
+      const allTricks = await this.db.tricks.toArray();
+      allTricks.forEach((trick) => {
+        // Remove trick from other tricks recommended prerequisites
+        if (trick.recommendedPrerequisites) {
+          const newPrereq = trick.recommendedPrerequisites.filter(
+            (primaryKey) => !primaryKeysMatch(primaryKey, this.primaryKey)
+          );
+          if (trick.recommendedPrerequisites.length !== newPrereq.length) {
+            this.db.tricks.update([trick.id, trick.trickStatus], {
+              recommendedPrerequisites: newPrereq,
+            });
+          }
+        }
+
+        // Remove trick from other tricks variation of
+        if (trick.variationOf) {
+          const newVariation = trick.variationOf.filter(
+            (primaryKey) => !primaryKeysMatch(primaryKey, this.primaryKey)
+          );
+          if (trick.variationOf.length !== newVariation.length) {
+            this.db.tricks.update([trick.id, trick.trickStatus], { variationOf: newVariation });
+          }
+        }
+      });
+
+      // Remove trick from any comobs containing it
+      const allCombos = await this.db.combos.toArray();
+      allCombos.forEach((combo) => {
+        const newComboTricks = combo.tricks.filter(
+          (trick) => trick[0] != this.primaryKey[0] || trick[1] != this.primaryKey[1]
+        );
+        if (newComboTricks.length !== combo.tricks.length) {
+          this.db.combos.update([combo.id, combo.comboStatus], { tricks: newComboTricks });
+        }
+      });
+    });
+  }
+
+  public async updateStatusPersistent(
+    status: 'official' | 'archived' | 'userDefined'
+  ): Promise<[number, 'official' | 'archived' | 'userDefined']> {
+    if (this.#modified.deleted) {
+      throw new Error('Cannot update status! Trick has been deleted.');
     }
+
+    // Gets updated in transaction. If the transaction fails an error is thrown by the transaction
+    // and the value of the variable becomes irrelevant. Otherwise it is returned after the transaction.
+    let newPrimaryKey: [number, 'official' | 'archived' | 'userDefined'] = [
+      this.primaryKey[0],
+      this.primaryKey[1],
+    ];
+
+    await this.db.transaction('rw', this.db.tricks, this.db.metadata, this.db.combos, async () => {
+      const originalPrimaryKey = this.primaryKey;
+
+      // Check for id collision and generate new id if necessary
+      const allIdsOfTargetStatus: number[] = (await this.db.tricks.toArray())
+        .filter((trick) => trick.trickStatus === status)
+        .map((trick) => trick.id);
+      let newId = originalPrimaryKey[0];
+      if (allIdsOfTargetStatus.includes(originalPrimaryKey[0])) {
+        newId = Math.max(...allIdsOfTargetStatus) + 1;
+      }
+      newPrimaryKey = [newId, status];
+
+      // Update trick itself
+      this.db.tricks.update(originalPrimaryKey, { id: newId, trickStatus: status });
+
+      // Update metadata
+      this.db.metadata.update([...originalPrimaryKey, 'Trick'], {
+        id: newId,
+        entityStatus: status,
+      });
+
+      // Update recommended prerequisites
+      const allTricks = await this.db.tricks.toArray();
+      allTricks.forEach((trick) => {
+        if (
+          !trick.recommendedPrerequisites ||
+          !trick.recommendedPrerequisites.some((e) => primaryKeysMatch(e, originalPrimaryKey))
+        ) {
+          return;
+        }
+
+        const newPrerequisites = trick.recommendedPrerequisites.map((prerequisitePrimaryKey) => {
+          return primaryKeysMatch(prerequisitePrimaryKey, originalPrimaryKey)
+            ? newPrimaryKey
+            : prerequisitePrimaryKey;
+        });
+        this.db.tricks.update([trick.id, trick.trickStatus], {
+          recommendedPrerequisites: newPrerequisites,
+        });
+      });
+
+      // Update other tricks variationOf
+      allTricks.forEach((trick) => {
+        if (
+          !trick.variationOf ||
+          !trick.variationOf.some((e) => primaryKeysMatch(e, originalPrimaryKey))
+        ) {
+          return;
+        }
+
+        const newVariationOf = trick.variationOf.map((trickPrimaryKey) => {
+          return primaryKeysMatch(trickPrimaryKey, originalPrimaryKey)
+            ? newPrimaryKey
+            : trickPrimaryKey;
+        });
+        this.db.tricks.update([trick.id, trick.trickStatus], {
+          variationOf: newVariationOf,
+        });
+      });
+
+      // Update all references in combos
+      const allCombos = await this.db.combos.toArray();
+      allCombos.forEach((combo) => {
+        if (!combo.tricks) {
+          return;
+        }
+        if (!combo.tricks.some((e) => primaryKeysMatch(e, originalPrimaryKey))) {
+          return;
+        }
+
+        const newComboTricks = combo.tricks.map((trickPrimaryKey) => {
+          return primaryKeysMatch(trickPrimaryKey, originalPrimaryKey)
+            ? newPrimaryKey
+            : trickPrimaryKey;
+        });
+        this.db.combos.update([combo.id, combo.comboStatus], {
+          tricks: newComboTricks,
+        });
+      });
+    });
+    return newPrimaryKey;
   }
 }

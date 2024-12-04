@@ -17,12 +17,21 @@ export type DbObject = {
    * Invoke this to delete an Entity.
    * **It is the UIs responsibility to protect against - for example - deleting predefined tricks**
    */
-  delete(): Promise<true | string>;
+  delete(): Promise<void>;
 
   /**
    * Update the Object with values from the database.
    */
   refetch(): Promise<true | string>;
+
+  /**
+   * Update the status of the Object, resulting in the update of its primary key and all references.
+   * Needed primarily for converting archived tricks to userDefined tricks.
+   * Returns the new id and status of the object.
+   */
+  updateStatusPersistent(
+    status: 'official' | 'archived' | 'userDefined'
+  ): Promise<[number, 'official' | 'archived' | 'userDefined']>;
 
   /**
    * Returns if the Object has been modified "locally"
