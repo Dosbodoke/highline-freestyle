@@ -24,14 +24,23 @@ const i18n = useI18n({
 const { t } = i18n;
 
 const LOCAL_STORAGE_PARAMETERS_KEY: string = 'SearchParameters-Tricks';
-const DEFAULT_SEARCH_PARAMETERS: SearchParameters = { sortOrder: 'difficulty-asc' };
+const DEFAULT_SEARCH_PARAMETERS: SearchParameters = {
+  sortOrder: 'difficulty-asc',
+  includedStatuses: ['official', 'userDefined', 'archived'],
+};
 
 function loadSearchParameters(): SearchParameters {
   const parametersAsString = window.localStorage.getItem(LOCAL_STORAGE_PARAMETERS_KEY);
   if (!parametersAsString) {
     return DEFAULT_SEARCH_PARAMETERS;
   }
-  return JSON.parse(parametersAsString);
+
+  const parameters = JSON.parse(parametersAsString);
+  parameters.sortOrder = parameters.sortOrder || DEFAULT_SEARCH_PARAMETERS.sortOrder;
+  parameters.includedStatuses =
+    parameters.includedStatuses || DEFAULT_SEARCH_PARAMETERS.includedStatuses;
+
+  return parameters;
 }
 
 function storeSearchParameters(parameters: SearchParameters) {
@@ -84,6 +93,19 @@ function linkToDetails(primaryKey: PrimaryKey): string {
 
     <Section>
       <div class="w-full flex flex-col gap-5">
+        <!-- No Search Results-->
+        <div v-if="!searchResult || searchResult.length == 0" class="text-xl text-center mt-3">
+          {{ t('info.noTrickMatchingSearch') }}<br />
+          <span class="font-semibold"> :( </span>
+          <div class="flex flex-row justify-center mt-3">
+            <img
+              src="https://media1.tenor.com/m/XQLVLptLIBEAAAAd/maes-b-lost-in-a-field.gif"
+              class="w-48"
+            />
+          </div>
+        </div>
+
+        <!-- Search Results-->
         <div
           v-for="section in searchResult"
           class="w-full flex flex-col gap-1"
