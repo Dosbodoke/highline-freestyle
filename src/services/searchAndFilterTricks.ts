@@ -2,6 +2,84 @@ import { Trick } from '@/lib/database/daos/trick';
 import { SearchItem, SearchParameters, SearchResult, SortOrder } from '@/types/search';
 import { isStickableNew } from '@/util/misc';
 
+type TrickNameToUse = 'alias' | 'technical';
+
+function equalLengthStringDistance(a: string, b: string): number {
+  if (a.length !== b.length) {
+    throw new Error('Both strings need to be of equal length.');
+  }
+
+  // Here exists the option to swap out the UNEQUAL_CHARACTER_DISTANCE for a
+  // more sophisticated distance between characters (based on the distance
+  // between them on a keyboard for typos, or based on how similar they sound
+  //  for example)
+  const UNEQUAL_CHARACTER_DISTANCE = 1;
+
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) {
+    diff += a.charAt(i) == b.charAt(i) ? 0 : UNEQUAL_CHARACTER_DISTANCE;
+  }
+  return diff;
+}
+
+function textDistance(baseText: string, query: string): number {
+  const PENALTY_PER_MISSING_CHAR = 1;
+
+  let minDist = Infinity;
+  for (let originalStartIdx = 0; originalStartIdx < baseText.length; originalStartIdx++) {
+    const maxCommonLength = Math.min(query.length, baseText.length - originalStartIdx);
+    const cutToLengthBase = baseText.substring(
+      originalStartIdx,
+      originalStartIdx + maxCommonLength
+    );
+    const cutToLengthQuery = query.substring(0, maxCommonLength);
+
+    const dist = equalLengthStringDistance(cutToLengthBase, cutToLengthQuery);
+    const missingCharacterPenalty = PENALTY_PER_MISSING_CHAR * (query.length - maxCommonLength);
+    minDist = Math.min(minDist, dist + missingCharacterPenalty);
+  }
+
+  const unmatchedCharactersPenalty = 1 - 1 / (Math.abs(baseText.length - query.length) + 1);
+  return minDist + unmatchedCharactersPenalty;
+}
+
+function trickNameDistance(
+  trick: Trick,
+  query: string
+): { distance: number; nameToUse: TrickNameToUse } {
+  query = query.toLowerCase();
+  const technicalName = trick.technicalName.toLowerCase();
+  const alias = (trick.alias || '').toLowerCase();
+
+  const distanceTechnicalName = textDistance(technicalName, query);
+  const distanceAlias = textDistance(alias, query);
+
+  return distanceAlias <= distanceTechnicalName
+    ? { distance: distanceAlias, nameToUse: 'alias' }
+    : { distance: distanceTechnicalName, nameToUse: 'technical' };
+}
+
+function textSearch(tricks: Trick[], query: string): { trick: Trick; nameToUse: TrickNameToUse }[] {
+  const MATCH_DISTANCE_MAX = Math.ceil(query.length / 3);
+  return tricks
+    .map((trick) => {
+      const { distance, nameToUse } = trickNameDistance(trick, query);
+      return {
+        trick: trick,
+        dist: distance,
+        nameToUse: nameToUse,
+      };
+    })
+    .filter((elem) => elem.dist <= MATCH_DISTANCE_MAX)
+    .sort((a, b) => a.dist - b.dist)
+    .map((elem) => {
+      return {
+        trick: elem.trick,
+        nameToUse: elem.nameToUse,
+      };
+    });
+}
+
 function comparePrimaryKey(a: Trick, b: Trick): number {
   const statusOrder = ['official', 'userDefined', 'archived'];
   const statusDiff = statusOrder.indexOf(a.primaryKey[1]) - statusOrder.indexOf(b.primaryKey[1]);
@@ -51,9 +129,9 @@ function sortTricks(tricks: Trick[], sorting: SortOrder): Trick[] {
   }
 }
 
-function searchItemFromTrick(trick: Trick): SearchItem {
+function searchItemFromTrick(trick: Trick, name: TrickNameToUse): SearchItem {
   return {
-    name: trick.alias ?? trick.technicalName,
+    name: name === 'alias' ? trick.alias ?? trick.technicalName : trick.technicalName,
     primaryKey: [trick.primaryKey[0], trick.primaryKey[1]],
     stickFrequency: trick.stickFrequency,
     isFavorite: trick.isFavourite,
@@ -77,7 +155,7 @@ function groupTricksToSearchResult(
       currentGroup = mapTrickToAttribute(trick, sorting);
       result.push({ title: currentGroup, items: [] });
     }
-    const searchItem = searchItemFromTrick(trick);
+    const searchItem = searchItemFromTrick(trick, 'alias');
     result[result.length - 1].items.push(searchItem);
   }
   return result;
@@ -88,15 +166,23 @@ export function searchInTricks(
   searchParameters: SearchParameters,
   mapTrickToAttribute: (t: Trick, sort: SortOrder) => string
 ): SearchResult {
+  if (searchParameters.searchText !== undefined && searchParameters.searchText !== '') {
+    const matchingTricks = textSearch(allTricks, searchParameters.searchText);
+    const searchItems = matchingTricks.map((trickWithInfo) =>
+      searchItemFromTrick(trickWithInfo.trick, trickWithInfo.nameToUse)
+    );
+    return [
+      {
+        title: `"${searchParameters.searchText}"`,
+        items: searchItems,
+      },
+    ];
+  }
+
   const filteredTricks = allTricks.filter((trick) =>
     searchParameters.includedStatuses.includes(trick.primaryKey[1])
   );
 
   const sortedTricks = sortTricks(filteredTricks, searchParameters.sortOrder);
-  const searchResult = groupTricksToSearchResult(
-    sortedTricks,
-    searchParameters.sortOrder,
-    mapTrickToAttribute
-  );
-  return searchResult;
+  return groupTricksToSearchResult(sortedTricks, searchParameters.sortOrder, mapTrickToAttribute);
 }
