@@ -22,6 +22,10 @@ import { i18nMerge } from '@/i18n/i18nmerge';
 import messages from '@/i18n/searchMenu';
 import messagesStickableStatus from '@/i18n/common/stickableStatus';
 import { Icon } from '@iconify/vue/dist/iconify.js';
+import DropdownMenuRadioGroup from '@/components/ui/dropdown-menu/DropdownMenuRadioGroup.vue';
+import DropdownMenuRadioItem from '@/components/ui/dropdown-menu/DropdownMenuRadioItem.vue';
+import DropdownMenuLabel from '@/components/ui/dropdown-menu/DropdownMenuLabel.vue';
+import DropdownMenuSeparator from '@/components/ui/dropdown-menu/DropdownMenuSeparator.vue';
 
 const { t } = useI18n({
   messages: i18nMerge(messages, messagesStickableStatus),
@@ -62,7 +66,7 @@ const sortingOptions: { titleKey: string; directionTitleKey?: string; value: Sor
 ];
 const activeSortingOption = ref<SortOrder>(searchParameters.value?.sortOrder);
 
-watchEffect(async () => {
+watchEffect(() => {
   if (searchParameters.value === undefined) {
     throw new Error('Search Parameters model needs to be passed to TrickSearchMenu!');
   }
@@ -84,13 +88,14 @@ function updateIncludedStatuses(status: StickableStatus) {
   searchParameters.value?.includedStatuses.push(status);
 }
 
-const includedStatusesTriggerVariant = computed(() => {
-  const allOptionsChecked =
-    searchParameters.value?.includedStatuses.includes('official') &&
-    searchParameters.value?.includedStatuses.includes('userDefined') &&
-    searchParameters.value?.includedStatuses.includes('archived');
-  return allOptionsChecked ? 'secondary' : 'default';
-});
+const shouldStatusBeHighlighted = computed(
+  () =>
+    !(
+      searchParameters.value?.includedStatuses.includes('official') &&
+      searchParameters.value?.includedStatuses.includes('userDefined') &&
+      searchParameters.value?.includedStatuses.includes('archived')
+    )
+);
 
 // TEXT SEARCH
 
@@ -109,6 +114,24 @@ function setSearchText(text: string | number) {
 const textSearchContainsText = computed<boolean>(() => {
   return searchParameters.value !== undefined && !!searchParameters.value.searchText;
 });
+
+// FAVORITES
+
+type FavoritesAtTopOptions = 'showAtTop' | 'dontShowAtTop';
+const favoritesTreatment = ref<FavoritesAtTopOptions>(
+  searchParameters.value.showFavoritesAtTop ? 'showAtTop' : 'dontShowAtTop'
+);
+watchEffect(() => {
+  if (!searchParameters.value) {
+    throw new Error('Search Parameters model needs to be passed to TrickSearchMenu!');
+  }
+  searchParameters.value.showFavoritesAtTop = favoritesTreatment.value === 'showAtTop';
+});
+
+// GENERAL
+function highlightFilterClasses(highlight: boolean | undefined): string {
+  return highlight ? 'font-medium' : 'font-normal';
+}
 </script>
 
 <template>
@@ -156,10 +179,14 @@ const textSearchContainsText = computed<boolean>(() => {
       </div>
     </div>
 
-    <div class="flex flex-row gap-1 w-full">
+    <div class="flex flex-row flex-wrap gap-1 w-full">
       <DropdownMenu>
         <DropdownMenuTrigger as-child :disabled="textSearchContainsText">
-          <Button :variant="includedStatusesTriggerVariant" size="sm">
+          <Button
+            variant="secondary"
+            size="sm"
+            :class="highlightFilterClasses(shouldStatusBeHighlighted)"
+          >
             {{ t('includedStickableStatuses.triggerTitle') }}
           </Button>
         </DropdownMenuTrigger>
@@ -182,6 +209,36 @@ const textSearchContainsText = computed<boolean>(() => {
           >
             {{ t('archived') }}
           </DropdownMenuCheckboxItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <DropdownMenu>
+        <DropdownMenuTrigger as-child :disabled="textSearchContainsText">
+          <Button
+            variant="secondary"
+            size="sm"
+            :class="highlightFilterClasses(searchParameters?.showFavoritesAtTop)"
+          >
+            {{
+              t(
+                searchParameters?.showFavoritesAtTop
+                  ? 'favoritesPlacement.triggerTitleTop'
+                  : 'favoritesPlacement.triggerTitleRegular'
+              )
+            }}
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent>
+          <DropdownMenuLabel> {{ t('favoritesPlacement.menuLabel') }} </DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <DropdownMenuRadioGroup v-model="favoritesTreatment">
+            <DropdownMenuRadioItem value="showAtTop">
+              {{ t('favoritesPlacement.radioItems.top') }}
+            </DropdownMenuRadioItem>
+            <DropdownMenuRadioItem value="dontShowAtTop">
+              {{ t('favoritesPlacement.radioItems.regular') }}
+            </DropdownMenuRadioItem>
+          </DropdownMenuRadioGroup>
         </DropdownMenuContent>
       </DropdownMenu>
     </div>

@@ -1,5 +1,11 @@
 import { Trick } from '@/lib/database/daos/trick';
-import { SearchItem, SearchParameters, SearchResult, SortOrder } from '@/types/search';
+import {
+  SearchItem,
+  SearchParameters,
+  SearchResult,
+  SearchSection,
+  SortOrder,
+} from '@/types/search';
 import { isStickableNew } from '@/util/misc';
 
 type TrickNameToUse = 'alias' | 'technical';
@@ -164,7 +170,8 @@ function groupTricksToSearchResult(
 export function searchInTricks(
   allTricks: Trick[],
   searchParameters: SearchParameters,
-  mapTrickToAttribute: (t: Trick, sort: SortOrder) => string
+  mapTrickToAttribute: (t: Trick, sort: SortOrder) => string,
+  favoritesSectionTitle: string
 ): SearchResult {
   if (searchParameters.searchText !== undefined && searchParameters.searchText !== '') {
     const matchingTricks = textSearch(allTricks, searchParameters.searchText);
@@ -184,5 +191,26 @@ export function searchInTricks(
   );
 
   const sortedTricks = sortTricks(filteredTricks, searchParameters.sortOrder);
-  return groupTricksToSearchResult(sortedTricks, searchParameters.sortOrder, mapTrickToAttribute);
+
+  if (!searchParameters.showFavoritesAtTop) {
+    return groupTricksToSearchResult(sortedTricks, searchParameters.sortOrder, mapTrickToAttribute);
+  }
+
+  const isolatedFavorites = sortedTricks.filter((trick) => trick.isFavourite);
+
+  if (isolatedFavorites.length == 0) {
+    return groupTricksToSearchResult(sortedTricks, searchParameters.sortOrder, mapTrickToAttribute);
+  }
+
+  const sortedTricksWithoutFavorites = sortedTricks.filter((trick) => !trick.isFavourite);
+  const favoritesSearchItem: SearchSection = {
+    title: favoritesSectionTitle,
+    items: isolatedFavorites.map((trick) => searchItemFromTrick(trick, 'alias')),
+  };
+  const searchResultWithoutFavorites = groupTricksToSearchResult(
+    sortedTricksWithoutFavorites,
+    searchParameters.sortOrder,
+    mapTrickToAttribute
+  );
+  return [favoritesSearchItem].concat(searchResultWithoutFavorites);
 }

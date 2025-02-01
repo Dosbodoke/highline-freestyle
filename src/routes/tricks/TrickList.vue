@@ -27,6 +27,7 @@ const LOCAL_STORAGE_PARAMETERS_KEY: string = 'SearchParameters-Tricks';
 const DEFAULT_SEARCH_PARAMETERS: SearchParameters = {
   sortOrder: 'difficulty-asc',
   includedStatuses: ['official', 'userDefined', 'archived'],
+  showFavoritesAtTop: true,
 };
 
 function loadSearchParameters(): SearchParameters {
@@ -39,6 +40,8 @@ function loadSearchParameters(): SearchParameters {
   parameters.sortOrder = parameters.sortOrder || DEFAULT_SEARCH_PARAMETERS.sortOrder;
   parameters.includedStatuses =
     parameters.includedStatuses || DEFAULT_SEARCH_PARAMETERS.includedStatuses;
+  parameters.showFavoritesAtTop =
+    parameters.showFavoritesAtTop || DEFAULT_SEARCH_PARAMETERS.showFavoritesAtTop;
 
   return parameters;
 }
@@ -72,7 +75,12 @@ watch(
   [searchParameters, i18n.locale],
   async () => {
     const allTricks = await tricksDao.getAll();
-    searchResult.value = searchInTricks(allTricks, searchParameters.value, trickToAttribute);
+    searchResult.value = searchInTricks(
+      allTricks,
+      searchParameters.value,
+      trickToAttribute,
+      t('sectionTitles.favorites')
+    );
     storeSearchParameters(searchParameters.value);
   },
   { immediate: true, deep: true }
